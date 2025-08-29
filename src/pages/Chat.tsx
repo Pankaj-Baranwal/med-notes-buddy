@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Send, BookOpen, Menu } from "lucide-react";
+import { Send, BookOpen, Menu, Lightbulb, Stethoscope } from "lucide-react";
 import { dummyChatMessages, type ChatMessage } from "@/lib/data";
 import { BottomNavigation } from "@/components/layout/BottomNavigation";
 
@@ -11,6 +11,7 @@ export default function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>(dummyChatMessages);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [enhanceMode, setEnhanceMode] = useState<'none' | 'simplify' | 'clinical'>('none');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -21,26 +22,36 @@ export default function Chat() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = async () => {
-    if (!inputValue.trim()) return;
+  const handleSendMessage = async (customContent?: string, mode?: 'simplify' | 'clinical') => {
+    const messageContent = customContent || inputValue;
+    if (!messageContent.trim()) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       type: 'user',
-      content: inputValue,
+      content: messageContent,
       timestamp: new Date().toISOString()
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInputValue("");
     setIsLoading(true);
+    setEnhanceMode('none');
 
-    // Simulate AI response
+    // Simulate AI response with enhancement
     setTimeout(() => {
+      let content = "I understand you're asking about medical concepts. Let me help you with that based on your uploaded PDFs.";
+      
+      if (mode === 'simplify') {
+        content = "**Simplified Explanation:** " + content + " I'll break this down into simpler terms and use everyday language to help you understand the complex medical concepts more easily.";
+      } else if (mode === 'clinical') {
+        content = "**Clinical Use-Case:** " + content + " Here's how this applies in real clinical scenarios with practical examples you might encounter in practice.";
+      }
+
       const aiResponse: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
-        content: "I understand you're asking about medical concepts. Let me help you with that based on your uploaded PDFs. This is a demo response showing how the AI would analyze your documents and provide relevant medical information with proper citations.",
+        content,
         timestamp: new Date().toISOString(),
         citations: [
           {
@@ -54,6 +65,11 @@ export default function Chat() {
       setMessages(prev => [...prev, aiResponse]);
       setIsLoading(false);
     }, 2000);
+  };
+
+  const handleEnhanceMessage = (mode: 'simplify' | 'clinical') => {
+    if (!inputValue.trim()) return;
+    handleSendMessage(inputValue, mode);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -152,23 +168,52 @@ export default function Chat() {
 
       {/* Input */}
       <div className="fixed bottom-16 left-0 right-0 bg-background border-t border-border px-4 py-3">
-        <div className="max-w-2xl mx-auto flex items-center gap-2">
-          <Input
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Ask about your medical textbooks..."
-            className="flex-1"
-            disabled={isLoading}
-          />
-          <Button
-            onClick={handleSendMessage}
-            disabled={!inputValue.trim() || isLoading}
-            size="sm"
-            className="medical-gradient text-primary-foreground"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+        <div className="max-w-2xl mx-auto space-y-3">
+          {/* Enhancement Options */}
+          {inputValue.trim() && (
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleEnhanceMessage('simplify')}
+                disabled={isLoading}
+                className="text-xs"
+              >
+                <Lightbulb className="h-3 w-3 mr-1" />
+                Simplify
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleEnhanceMessage('clinical')}
+                disabled={isLoading}
+                className="text-xs"
+              >
+                <Stethoscope className="h-3 w-3 mr-1" />
+                Clinical Example
+              </Button>
+            </div>
+          )}
+          
+          {/* Message Input */}
+          <div className="flex items-center gap-2">
+            <Input
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Ask about your medical textbooks..."
+              className="flex-1"
+              disabled={isLoading}
+            />
+            <Button
+              onClick={() => handleSendMessage()}
+              disabled={!inputValue.trim() || isLoading}
+              size="sm"
+              className="medical-gradient text-primary-foreground"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 

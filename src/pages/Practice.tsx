@@ -3,33 +3,57 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Brain, Trophy, Clock, Target, Plus, CheckCircle2, XCircle } from "lucide-react";
-import { dummyQuizAttempts, dummyMCQs, type QuizAttempt, type MCQQuestion } from "@/lib/data";
+import { Brain, Trophy, Clock, Target, Plus, CheckCircle2, XCircle, BarChart3, Settings } from "lucide-react";
+import { dummyQuizAttempts, dummyMCQs, dummyShortAnswers, dummyLongAnswers, type QuizAttempt, type Question, type QuestionType } from "@/lib/data";
 import { BottomNavigation } from "@/components/layout/BottomNavigation";
+import { QuizModeSelector } from "@/components/practice/QuizModeSelector";
+import { ProgressDashboard } from "@/components/practice/ProgressDashboard";
 import { cn } from "@/lib/utils";
 
-type QuizState = 'overview' | 'active' | 'results';
+type QuizState = 'overview' | 'mode-select' | 'active' | 'results' | 'progress';
 
 export default function Practice() {
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>(dummyQuizAttempts);
   const [quizState, setQuizState] = useState<QuizState>('overview');
-  const [currentQuiz, setCurrentQuiz] = useState<MCQQuestion[]>([]);
+  const [currentQuiz, setCurrentQuiz] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
+  const [userAnswers, setUserAnswers] = useState<(number | string)[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [currentQuizType, setCurrentQuizType] = useState<QuestionType>('mcq');
+  const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
 
   const startNewQuiz = () => {
-    setCurrentQuiz(dummyMCQs);
+    setQuizState('mode-select');
+  };
+
+  const startQuizWithConfig = (config: { type: QuestionType; selectedChapters: string[]; questionCount: number }) => {
+    // Generate questions based on type
+    let questions: Question[] = [];
+    switch (config.type) {
+      case 'mcq':
+        questions = dummyMCQs.slice(0, Math.min(config.questionCount, dummyMCQs.length));
+        break;
+      case 'short-answer':
+        questions = dummyShortAnswers.slice(0, Math.min(config.questionCount, dummyShortAnswers.length));
+        break;
+      case 'long-answer':
+        questions = dummyLongAnswers.slice(0, Math.min(config.questionCount, dummyLongAnswers.length));
+        break;
+    }
+
+    setCurrentQuiz(questions);
+    setCurrentQuizType(config.type);
+    setSelectedChapters(config.selectedChapters);
     setCurrentQuestionIndex(0);
-    setSelectedAnswers([]);
+    setUserAnswers([]);
     setShowResults(false);
     setQuizState('active');
   };
 
-  const selectAnswer = (answerIndex: number) => {
-    const newAnswers = [...selectedAnswers];
-    newAnswers[currentQuestionIndex] = answerIndex;
-    setSelectedAnswers(newAnswers);
+  const selectAnswer = (answer: number | string) => {
+    const newAnswers = [...userAnswers];
+    newAnswers[currentQuestionIndex] = answer;
+    setUserAnswers(newAnswers);
   };
 
   const nextQuestion = () => {
@@ -48,18 +72,30 @@ export default function Practice() {
 
   const finishQuiz = () => {
     setShowResults(true);
-    const score = selectedAnswers.reduce((total, answer, index) => {
-      return total + (answer === currentQuiz[index].correctAnswer ? 1 : 0);
-    }, 0);
+    
+    // Calculate score based on question type
+    let score = 0;
+    userAnswers.forEach((answer, index) => {
+      const question = currentQuiz[index];
+      if (question.type === 'mcq') {
+        score += answer === (question as any).correctAnswer ? 1 : 0;
+      } else {
+        // For short/long answers, simulate basic scoring
+        score += typeof answer === 'string' && answer.length > 10 ? 1 : 0;
+      }
+    });
 
     const newAttempt: QuizAttempt = {
       id: Date.now().toString(),
-      title: 'Practice Quiz',
+      title: `${currentQuizType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())} Quiz`,
+      type: currentQuizType,
       questions: currentQuiz,
+      userAnswers,
       score,
       totalQuestions: currentQuiz.length,
       completedAt: new Date().toISOString(),
-      timeSpent: 15
+      timeSpent: 15,
+      selectedChapters
     };
 
     setQuizAttempts(prev => [newAttempt, ...prev]);
@@ -69,7 +105,7 @@ export default function Practice() {
     setQuizState('overview');
     setCurrentQuiz([]);
     setCurrentQuestionIndex(0);
-    setSelectedAnswers([]);
+    setUserAnswers([]);
     setShowResults(false);
   };
 
@@ -98,15 +134,68 @@ export default function Practice() {
     return colors[difficulty as keyof typeof colors] || 'bg-muted text-muted-foreground';
   };
 
+  // Mode Selection Screen
+  if (quizState === 'mode-select') {
+    return (
+      <div className="flex flex-col h-screen bg-background">
+        <header className="bg-card border-b border-border px-4 py-4">
+          <h1 className="text-xl font-semibold">Start New Quiz</h1>
+        </header>
+        
+        <div className="flex-1 overflow-y-auto px-4 py-6 pb-24">
+          <div className="max-w-2xl mx-auto">
+            <QuizModeSelector
+              onStartQuiz={startQuizWithConfig}
+              onCancel={() => setQuizState('overview')}
+            />
+          </div>
+        </div>
+        
+        <BottomNavigation />
+      </div>
+    );
+  }
+
+  // Progress Dashboard Screen
+  if (quizState === 'progress') {
+    return (
+      <div className="flex flex-col h-screen bg-background">
+        <header className="bg-card border-b border-border px-4 py-4">
+          <h1 className="text-xl font-semibold">Progress Analytics</h1>
+        </header>
+        
+        <div className="flex-1 overflow-y-auto px-4 py-6 pb-24">
+          <div className="max-w-2xl mx-auto">
+            <ProgressDashboard
+              onRetryWeakTopics={() => {
+                // Start quiz with weak topics
+                setQuizState('mode-select');
+              }}
+              onBack={() => setQuizState('overview')}
+            />
+          </div>
+        </div>
+        
+        <BottomNavigation />
+      </div>
+    );
+  }
+
   if (quizState === 'active') {
     const currentQuestion = currentQuiz[currentQuestionIndex];
     const progress = ((currentQuestionIndex + 1) / currentQuiz.length) * 100;
-    const selectedAnswer = selectedAnswers[currentQuestionIndex];
+    const currentAnswer = userAnswers[currentQuestionIndex];
 
     if (showResults) {
-      const score = selectedAnswers.reduce((total, answer, index) => {
-        return total + (answer === currentQuiz[index].correctAnswer ? 1 : 0);
-      }, 0);
+      let score = 0;
+      userAnswers.forEach((answer, index) => {
+        const question = currentQuiz[index];
+        if (question.type === 'mcq') {
+          score += answer === (question as any).correctAnswer ? 1 : 0;
+        } else {
+          score += typeof answer === 'string' && answer.length > 10 ? 1 : 0;
+        }
+      });
       const percentage = Math.round((score / currentQuiz.length) * 100);
 
       return (
@@ -139,8 +228,15 @@ export default function Practice() {
 
               <div className="space-y-4 mb-6">
                 {currentQuiz.map((question, index) => {
-                  const userAnswer = selectedAnswers[index];
-                  const isCorrect = userAnswer === question.correctAnswer;
+                  const userAnswer = userAnswers[index];
+                  let isCorrect = false;
+                  
+                  if (question.type === 'mcq') {
+                    isCorrect = userAnswer === (question as any).correctAnswer;
+                  } else {
+                    // For short/long answers, simulate scoring based on length
+                    isCorrect = typeof userAnswer === 'string' && userAnswer.length > 10;
+                  }
 
                   return (
                     <Card key={index} className={cn(
@@ -159,21 +255,34 @@ export default function Practice() {
                               {question.question}
                             </CardTitle>
                             <div className="space-y-2">
-                              {question.options.map((option, optionIndex) => (
-                                <div
-                                  key={optionIndex}
-                                  className={cn(
-                                    "p-2 rounded text-sm",
-                                    optionIndex === question.correctAnswer
-                                      ? "bg-success/20 text-success font-medium"
-                                      : optionIndex === userAnswer && !isCorrect
-                                      ? "bg-destructive/20 text-destructive"
-                                      : "bg-muted/50"
-                                  )}
-                                >
-                                  {option}
+                              {question.type === 'mcq' ? (
+                                (question as any).options.map((option: string, optionIndex: number) => (
+                                  <div
+                                    key={optionIndex}
+                                    className={cn(
+                                      "p-2 rounded text-sm",
+                                      optionIndex === (question as any).correctAnswer
+                                        ? "bg-success/20 text-success font-medium"
+                                        : optionIndex === userAnswer && !isCorrect
+                                        ? "bg-destructive/20 text-destructive"
+                                        : "bg-muted/50"
+                                    )}
+                                  >
+                                    {option}
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="space-y-2">
+                                  <div className="p-3 bg-muted/50 rounded">
+                                    <p className="text-sm font-medium mb-1">Your Answer:</p>
+                                    <p className="text-sm">{userAnswer || 'No answer provided'}</p>
+                                  </div>
+                                  <div className="p-3 bg-success/10 rounded">
+                                    <p className="text-sm font-medium mb-1">Sample Answer:</p>
+                                    <p className="text-sm">{(question as any).sampleAnswer}</p>
+                                  </div>
                                 </div>
-                              ))}
+                              )}
                             </div>
                             {!isCorrect && (
                               <p className="text-sm text-muted-foreground mt-3">
@@ -231,32 +340,49 @@ export default function Practice() {
             </Card>
 
             <div className="space-y-3 mb-6">
-              {currentQuestion.options.map((option, index) => (
-                <Card
-                  key={index}
-                  className={cn(
-                    "cursor-pointer transition-all hover:shadow-md",
-                    selectedAnswer === index
-                      ? "ring-2 ring-primary border-primary bg-primary/5"
-                      : "hover:border-primary/50"
-                  )}
-                  onClick={() => selectAnswer(index)}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-medium",
-                        selectedAnswer === index
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-muted-foreground"
-                      )}>
-                        {String.fromCharCode(65 + index)}
+              {currentQuestion.type === 'mcq' ? (
+                (currentQuestion as any).options.map((option: string, index: number) => (
+                  <Card
+                    key={index}
+                    className={cn(
+                      "cursor-pointer transition-all hover:shadow-md",
+                      currentAnswer === index
+                        ? "ring-2 ring-primary border-primary bg-primary/5"
+                        : "hover:border-primary/50"
+                    )}
+                    onClick={() => selectAnswer(index)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-medium",
+                          currentAnswer === index
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-muted-foreground"
+                        )}>
+                          {String.fromCharCode(65 + index)}
+                        </div>
+                        <p className="text-sm leading-relaxed">{option}</p>
                       </div>
-                      <p className="text-sm leading-relaxed">{option}</p>
-                    </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <Card>
+                  <CardContent className="p-4">
+                    <textarea
+                      value={(currentAnswer as string) || ''}
+                      onChange={(e) => selectAnswer(e.target.value)}
+                      placeholder={currentQuestion.type === 'short-answer' 
+                        ? 'Write a brief answer (2-3 sentences)...' 
+                        : 'Write a detailed explanation...'
+                      }
+                      rows={currentQuestion.type === 'short-answer' ? 4 : 8}
+                      className="w-full p-3 border border-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
                   </CardContent>
                 </Card>
-              ))}
+              )}
             </div>
 
             <div className="flex gap-3">
@@ -271,7 +397,7 @@ export default function Practice() {
               )}
               <Button
                 onClick={nextQuestion}
-                disabled={selectedAnswer === undefined}
+                disabled={currentAnswer === undefined || (typeof currentAnswer === 'string' && currentAnswer.trim() === '')}
                 className="flex-1 medical-gradient text-primary-foreground"
               >
                 {currentQuestionIndex === currentQuiz.length - 1 ? 'Finish' : 'Next'}
@@ -291,19 +417,29 @@ export default function Practice() {
       <header className="bg-card border-b border-border px-4 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold">MCQ Practice</h1>
+            <h1 className="text-xl font-semibold">Practice Hub</h1>
             <p className="text-sm text-muted-foreground">
               {quizAttempts.length} quizzes completed
             </p>
           </div>
-          <Button
-            onClick={startNewQuiz}
-            className="medical-gradient text-primary-foreground"
-            size="sm"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            New Quiz
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setQuizState('progress')}
+              variant="outline"
+              size="sm"
+            >
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Progress
+            </Button>
+            <Button
+              onClick={startNewQuiz}
+              className="medical-gradient text-primary-foreground"
+              size="sm"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Quiz
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -347,17 +483,28 @@ export default function Practice() {
                 Start New Practice
               </CardTitle>
               <CardDescription>
-                Generate MCQs from your uploaded PDFs and test your knowledge
+                Choose from MCQs, short answers, or long answers. Practice specific chapters and track your progress.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button
-                onClick={startNewQuiz}
-                className="w-full medical-gradient text-primary-foreground"
-                size="lg"
-              >
-                Generate Quiz
-              </Button>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <Button
+                  onClick={startNewQuiz}
+                  className="medical-gradient text-primary-foreground"
+                  size="sm"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Quiz
+                </Button>
+                <Button
+                  onClick={() => setQuizState('progress')}
+                  variant="outline"
+                  size="sm"
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  View Progress
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -370,7 +517,12 @@ export default function Practice() {
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div>
-                        <CardTitle className="text-base">{attempt.title}</CardTitle>
+                        <CardTitle className="text-base flex items-center gap-2">
+                          {attempt.title}
+                          <Badge variant="outline" className="text-xs">
+                            {attempt.type.replace('-', ' ')}
+                          </Badge>
+                        </CardTitle>
                         <CardDescription className="flex items-center gap-4 mt-1">
                           <span>{formatDate(attempt.completedAt)}</span>
                           <span className="flex items-center gap-1">
